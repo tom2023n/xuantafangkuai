@@ -349,7 +349,10 @@ export class BlockGame {
     if (!this.piece) return false;
     if (this.collides(this.piece.id, this.piece.rot, this.piece.col, this.piece.row + 1)) return false;
     this.piece.row += 1;
-    if (soft) this.score += 1;
+    if (soft) {
+      this.score += 1;
+      this.events.push({ type: "tick" });
+    }
     return true;
   }
 
