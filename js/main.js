@@ -367,7 +367,11 @@ function boot() {
     console.error(err);
     return;
   }
-  if (loadNum(MUTE_KEY) === 1) audio.setMuted(true);
+  try {
+    if (localStorage.getItem(MUTE_KEY) === "1") audio.setMuted(true);
+  } catch {
+    /* private mode */
+  }
   try {
     if (localStorage.getItem(MUSIC_KEY) === "0") audio.setMusic(false);
   } catch {
@@ -419,7 +423,11 @@ function boot() {
   });
   document.querySelectorAll(".js-mute").forEach((btn) => btn.addEventListener("click", toggleMute));
   document.querySelectorAll(".js-music").forEach((btn) => btn.addEventListener("click", toggleMusic));
-  document.addEventListener("pointerdown", () => audio.unlock(), { passive: true });
+  const unlockAudio = () => audio.unlock();
+  for (const type of ["touchstart", "touchend", "click"]) {
+    document.addEventListener(type, unlockAudio, { capture: true, passive: true });
+  }
+  document.addEventListener("pointerdown", unlockAudio, { capture: true, passive: true });
 
   bindRepeat(document.querySelector("#btn-left"), () => game.shift(-1));
   bindRepeat(document.querySelector("#btn-right"), () => game.shift(1));
@@ -527,6 +535,7 @@ function boot() {
   view.draw(game, 16, performance.now(), viewInsets());
   requestAnimationFrame(frame);
   window.game = game;
+  window.__sfx = audio;
 
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("./sw.js", { updateViaCache: "none" }).catch(() => {});
