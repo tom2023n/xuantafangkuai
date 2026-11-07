@@ -1,6 +1,6 @@
-import { BEST_KEY, COLS, MUTE_KEY } from "./config.js";
+import { BEST_KEY, COLS, MUTE_KEY, PIECE_COLOR } from "./config.js";
 import { createAudio } from "./audio.js";
-import { BlockGame, mulberry32 } from "./logic.js";
+import { BlockGame, SHAPES, mulberry32 } from "./logic.js";
 import { createView } from "./render.js";
 
 const CLEAR_NAME = { 1: "单行", 2: "双行", 3: "三行", 4: "四行" };
@@ -27,6 +27,8 @@ const els = {
   overScore: document.querySelector("#over-score"),
   overBest: document.querySelector("#over-best"),
   record: document.querySelector("#over-record"),
+  hold: document.querySelector("#hold-piece"),
+  next: document.querySelector("#next-pieces"),
 };
 
 const params = new URLSearchParams(location.search);
@@ -85,6 +87,42 @@ function syncMute() {
   });
 }
 
+function miniMarkup(id) {
+  const cells = SHAPES[id][0];
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minY = Infinity;
+  let maxY = -Infinity;
+  for (let i = 0; i < cells.length; i++) {
+    minX = Math.min(minX, cells[i][0]);
+    maxX = Math.max(maxX, cells[i][0]);
+    minY = Math.min(minY, cells[i][1]);
+    maxY = Math.max(maxY, cells[i][1]);
+  }
+  const color = PIECE_COLOR[id];
+  const bits = cells
+    .map(([x, y]) => `<i style="grid-column:${x - minX + 1};grid-row:${y - minY + 1};background:${color}"></i>`)
+    .join("");
+  return `<div class="mini" style="grid-template-columns:repeat(${maxX - minX + 1},1fr);grid-template-rows:repeat(${maxY - minY + 1},1fr)">${bits}</div>`;
+}
+
+let previewSig = "";
+function renderPreviews() {
+  const queue = game.queue || [];
+  const sig = `${game.held || ""}|${queue.slice(0, 3).join(",")}`;
+  if (sig === previewSig) return;
+  previewSig = sig;
+  els.hold.innerHTML = game.held ? miniMarkup(game.held) : `<span class="preview-empty">空</span>`;
+  els.next.innerHTML = queue.slice(0, 3).map(miniMarkup).join("");
+}
+
+function viewInsets() {
+  return {
+    top: hud.hidden ? 0 : hud.offsetHeight,
+    bottom: controls.hidden ? 0 : controls.offsetHeight,
+  };
+}
+
 function sync() {
   const live = game.status === "playing" || game.status === "clearing";
   hud.hidden = game.status === "home";
@@ -104,6 +142,7 @@ function sync() {
     els.overBest.textContent = String(stored);
     els.record.hidden = !(game.score > bestAtRun && game.score > 0);
   }
+  renderPreviews();
 }
 
 function showToast(text) {
@@ -436,11 +475,12 @@ function boot() {
       game.step(dt, { soft: softHold || keySoft });
     }
     handleEvents(game.drainEvents());
-    view.draw(game, dt, now);
+    renderPreviews();
+    view.draw(game, dt, now, viewInsets());
     requestAnimationFrame(frame);
   };
   sync();
-  view.draw(game, 16, performance.now());
+  view.draw(game, 16, performance.now(), viewInsets());
   requestAnimationFrame(frame);
   window.game = game;
 

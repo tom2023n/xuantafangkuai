@@ -22,6 +22,19 @@ export const MUTE_KEY = "litifangkuai-mute";
 
 export const PIECE_IDS = ["I", "O", "T", "S", "Z", "J", "L"];
 
+/** Vivid piece colors. Index matches the value stored on locked cells. */
+export const PIECE_COLOR = {
+  I: "#00e8f0",
+  O: "#ffe100",
+  T: "#c43bff",
+  S: "#2ee04a",
+  Z: "#ff3b3b",
+  J: "#3b6bff",
+  L: "#ff9a1a",
+};
+
+export const PIECE_HEX = [0, 0x00e8f0, 0xffe100, 0xc43bff, 0x2ee04a, 0xff3b3b, 0x3b6bff, 0xff9a1a];
+
 export function gravityMs(level) {
   return Math.max(70, Math.round(1000 * Math.pow(0.8, level - 1)));
 }

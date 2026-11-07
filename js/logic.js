@@ -365,13 +365,6 @@ export class BlockGame {
     return dist;
   }
 
-  ghostRow() {
-    if (!this.piece) return 0;
-    let row = this.piece.row;
-    while (!this.collides(this.piece.id, this.piece.rot, this.piece.col, row + 1)) row++;
-    return row;
-  }
-
   lock() {
     if (!this.piece) return;
     const cells = cellsOf(this.piece);

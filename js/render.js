@@ -28,14 +28,13 @@ import {
   COLS,
   FALL_MS,
   HIDDEN_ROWS,
+  PIECE_HEX,
   PITCH,
   TOTAL_ROWS,
   VISIBLE_ROWS,
 } from "./config.js";
-import { SHAPES, cellsOf, mulberry32 } from "./logic.js";
+import { cellsOf, mulberry32 } from "./logic.js";
 import { RoundedBoxGeometry } from "./rounded-box.js";
-
-const COLORS = [0x000000, 0xd7e4f2, 0xf3e4c6, 0xd7e3d6, 0xeadfca, 0xe4d8ee, 0xd5dbe8, 0xf3ead8];
 const FOV = 28;
 
 const dummy = new Object3D();
@@ -51,7 +50,7 @@ function boardX(col) {
 
 function shadeOf(col, row) {
   const n = ((col * 13 + row * 7) % 17) / 17;
-  return 0.94 + n * 0.1;
+  return 0.97 + n * 0.06;
 }
 
 function paint(mesh, index, hex, mul) {
@@ -181,50 +180,24 @@ export function createView(canvas) {
   const maxAniso = renderer.capabilities.getMaxAnisotropy();
   maps.color.anisotropy = maxAniso;
 
-  const stone = {
-    map: maps.color,
+  const gloss = {
     bumpMap: maps.bump,
-    bumpScale: 0.08,
-    roughness: 0.32,
-    metalness: 0.14,
+    bumpScale: 0.05,
+    roughness: 0.22,
+    metalness: 0.08,
+    color: 0xffffff,
   };
-  const landedMat = new MeshStandardMaterial({
-    ...stone,
-    roughness: 0.2,
-    metalness: 0.22,
-    color: 0xffffff,
-    emissive: 0x242018,
-    emissiveIntensity: 0.3,
-  });
-  const activeMat = new MeshStandardMaterial({
-    ...stone,
-    roughness: 0.16,
-    metalness: 0.24,
-    emissive: 0x7a7262,
-    emissiveIntensity: 0.55,
-  });
-  const ghostMat = new MeshStandardMaterial({
-    color: 0xffffff,
-    transparent: true,
-    opacity: 0.28,
-    roughness: 0.4,
-    metalness: 0.05,
-    emissive: 0xc5d0dc,
-    emissiveIntensity: 0.55,
-    depthWrite: false,
-  });
+  const landedMat = new MeshStandardMaterial(gloss);
+  const activeMat = new MeshStandardMaterial({ ...gloss, roughness: 0.16, metalness: 0.12 });
 
   const geo = new RoundedBoxGeometry(BOX_W, BOX_H, BOX_D, 2, BEVEL);
   const landed = new InstancedMesh(geo, landedMat, TOTAL_ROWS * COLS);
   const active = new InstancedMesh(geo, activeMat, 8);
-  const ghost = new InstancedMesh(geo, ghostMat, 8);
-  const previews = new InstancedMesh(geo, activeMat, 20);
-  for (const mesh of [landed, active, ghost, previews]) mesh.frustumCulled = false;
+  for (const mesh of [landed, active]) mesh.frustumCulled = false;
   landed.castShadow = true;
   landed.receiveShadow = true;
   active.castShadow = true;
-  ghost.renderOrder = 2;
-  scene.add(landed, active, ghost, previews);
+  scene.add(landed, active);
 
   const hemi = new HemisphereLight(0xe7eef8, 0x2a241c, 0.7);
   scene.add(hemi);
@@ -280,17 +253,30 @@ export function createView(canvas) {
   floor.castShadow = true;
   scene.add(floor);
 
-  const topY = boardY(HIDDEN_ROWS);
   let shakeAmp = 0;
+  renderer.autoClear = false;
 
-  function frameCamera(ox = 0, oy = 0) {
+  function frameCamera(insets = { top: 0, bottom: 0 }, ox = 0, oy = 0) {
     const w = canvas.clientWidth || window.innerWidth;
     const h = canvas.clientHeight || window.innerHeight;
-    camera.aspect = Math.max(0.01, w / Math.max(1, h));
-    const span = VISIBLE_ROWS * PITCH + 8.4;
-    const dist = span / 2 / Math.tan((FOV * Math.PI) / 360);
-    camera.position.set(0.7 + ox, 8.2 + oy, dist);
-    camera.lookAt(0, -1.5, 0);
+    const top = insets.top || 0;
+    const bottom = insets.bottom || 0;
+    const viewH = Math.max(1, h - top - bottom);
+    renderer.setScissorTest(false);
+    renderer.setViewport(0, 0, w, h);
+    renderer.clear(true, true, true);
+    renderer.setScissorTest(true);
+    renderer.setViewport(0, bottom, w, viewH);
+    renderer.setScissor(0, bottom, w, viewH);
+    camera.aspect = Math.max(0.01, w / viewH);
+    const boardW = COLS * PITCH + 1.7;
+    const boardH = VISIBLE_ROWS * PITCH + 1.8;
+    const vFov = (FOV * Math.PI) / 180;
+    const distH = boardH / 2 / Math.tan(vFov / 2);
+    const distW = boardW / 2 / (Math.tan(vFov / 2) * camera.aspect);
+    const dist = Math.max(distH, distW) * 1.05;
+    camera.position.set(0.55 + ox, 6.4 + oy, dist);
+    camera.lookAt(0, -0.55, 0);
     camera.updateProjectionMatrix();
   }
 
@@ -302,55 +288,13 @@ export function createView(canvas) {
     frameCamera();
   }
 
-  function layoutPreviews(queue, held) {
-    const items = [];
-    if (held) items.push(held);
-    for (let i = 0; i < Math.min(3, queue.length); i++) items.push(queue[i]);
-    const scale = 0.42;
-    const gap = 2.15;
-    const origin = -((items.length - 1) * gap) / 2;
-    let n = 0;
-    for (let i = 0; i < items.length; i++) {
-      const shape = SHAPES[items[i]][0];
-      let minX = Infinity;
-      let maxX = -Infinity;
-      let minY = Infinity;
-      let maxY = -Infinity;
-      for (const [x, y] of shape) {
-        minX = Math.min(minX, x);
-        maxX = Math.max(maxX, x);
-        minY = Math.min(minY, y);
-        maxY = Math.max(maxY, y);
-      }
-      const cx = (minX + maxX) / 2;
-      const cy = (minY + maxY) / 2;
-      const ox = origin + i * gap;
-      for (const [x, y] of shape) {
-        place(
-          previews,
-          n,
-          ox + (x - cx) * scale,
-          topY + 2.15 - (y - cy) * scale,
-          0.35,
-          scale,
-          scale,
-          scale * 0.8
-        );
-        const type = 1 + (i % 7);
-        paint(previews, n, COLORS[type], items[i] === held && i === 0 && held ? 1.05 : 1);
-        n++;
-      }
-    }
-    commit(previews, n);
-  }
-
   function drawCells(mesh, cells, opts) {
     let n = 0;
     for (let i = 0; i < cells.length; i++) {
       const cell = cells[i];
       const s = opts.scale || 1;
       place(mesh, n, boardX(cell.c), boardY(cell.r) + (opts.dy || 0), opts.z || 0, s, s, s);
-      paint(mesh, n, opts.color || COLORS[opts.type] || 0xe6e0d4, opts.mul || 1);
+      paint(mesh, n, opts.color || PIECE_HEX[opts.type] || PIECE_HEX[1], opts.mul || 1);
       n++;
     }
     commit(mesh, n);
@@ -362,9 +306,9 @@ export function createView(canvas) {
       shakeAmp = Math.max(shakeAmp, amount);
     },
     celebrate() {},
-    draw(game, dt, now) {
+    draw(game, dt, now, insets) {
       shakeAmp *= Math.exp(-dt / 90);
-      frameCamera((Math.random() - 0.5) * shakeAmp, (Math.random() - 0.5) * shakeAmp * 0.35);
+      frameCamera(insets, (Math.random() - 0.5) * shakeAmp, (Math.random() - 0.5) * shakeAmp * 0.35);
 
       const clearing = game.status === "clearing" && game.pendingRows ? new Set(game.pendingRows) : null;
       const clearT = clearing ? Math.min(1, game.clearElapsed / CLEAR_MS) : 0;
@@ -393,7 +337,7 @@ export function createView(canvas) {
             }
           }
           place(landed, n, boardX(c), boardY(r) + extraY, z, scale, scale, scale);
-          paint(landed, n, COLORS[type] || COLORS[1], mul);
+          paint(landed, n, PIECE_HEX[type] || PIECE_HEX[1], mul);
           n++;
         }
       }
@@ -401,32 +345,17 @@ export function createView(canvas) {
 
       if (game.piece && game.status !== "clearing") {
         const typeIndex = { I: 1, O: 2, T: 3, S: 4, Z: 5, J: 6, L: 7 }[game.piece.id] || 1;
-        if (game.status === "playing") {
-          const grow = game.ghostRow();
-          if (grow !== game.piece.row) {
-            drawCells(ghost, cellsOf({ ...game.piece, row: grow }), {
-              z: 0.02,
-              scale: 0.96,
-              type: typeIndex,
-              mul: 0.9,
-            });
-          } else commit(ghost, 0);
-        } else commit(ghost, 0);
         const bob = game.status === "home" ? Math.sin(now * 0.0022) * 0.08 : 0;
-        const pulse = game.status === "playing" ? 1.03 + Math.sin(now * 0.006) * 0.015 : 1.02;
+        const pulse = game.status === "playing" ? 1.02 : 1;
         drawCells(active, cellsOf(game.piece), {
-          z: 0.22,
+          z: 0.18,
           scale: pulse,
           type: typeIndex,
-          mul: 1.12,
+          mul: 1,
           dy: bob,
         });
-      } else {
-        commit(active, 0);
-        commit(ghost, 0);
-      }
+      } else commit(active, 0);
 
-      layoutPreviews(game.queue || [], game.held);
       renderer.render(scene, camera);
     },
   };
