@@ -35,7 +35,15 @@ import {
 } from "./config.js";
 import { cellsOf, mulberry32 } from "./logic.js";
 import { RoundedBoxGeometry } from "./rounded-box.js";
-const FOV = 28;
+
+// Narrow field of view, camera far away. The lens is shifted instead of
+// tilting the camera, so the board stays a true rectangle while the cubes
+// still show their top and side faces.
+const FOV = 8;
+const LENS_X = 0.16;
+const LENS_Y = 0.32;
+const BOARD_PAD_X = 1.42;
+const BOARD_PAD_Y = 1.55;
 
 const dummy = new Object3D();
 const tmpColor = new Color();
@@ -310,6 +318,9 @@ export function createView(canvas) {
   addRim(wellW + rimT * 2, rimT, 0, -halfH - rimT * 0.1);
 
   let shakeAmp = 0;
+  let camX = 0;
+  let camY = 0;
+  let camZ = 40;
   renderer.autoClear = false;
 
   function frameCamera(insets = { top: 0, bottom: 0 }, ox = 0, oy = 0) {
@@ -324,16 +335,35 @@ export function createView(canvas) {
     renderer.setScissorTest(true);
     renderer.setViewport(0, bottom, w, viewH);
     renderer.setScissor(0, bottom, w, viewH);
-    camera.aspect = Math.max(0.01, w / viewH);
-    const boardW = COLS * PITCH + 1.7;
-    const boardH = VISIBLE_ROWS * PITCH + 1.8;
-    const vFov = (FOV * Math.PI) / 180;
-    const distH = boardH / 2 / Math.tan(vFov / 2);
-    const distW = boardW / 2 / (Math.tan(vFov / 2) * camera.aspect);
-    const dist = Math.max(distH, distW) * 1.05;
-    camera.position.set(1.15 + ox, 11.2 + oy, dist);
-    camera.lookAt(0, -1.1, 0);
-    camera.updateProjectionMatrix();
+
+    const aspect = Math.max(0.01, w / viewH);
+    const boardW = COLS * PITCH + BOARD_PAD_X;
+    const boardH = VISIBLE_ROWS * PITCH + BOARD_PAD_Y;
+    const halfTan = Math.tan((FOV * Math.PI) / 360);
+    const dist = Math.max(boardH / 2 / halfTan, boardW / 2 / (halfTan * aspect)) * 1.03;
+    const visH = 2 * dist * halfTan;
+    const visW = visH * aspect;
+    const sx = LENS_X * dist;
+    const sy = LENS_Y * dist;
+    camX = sx;
+    camY = sy;
+    camZ = dist;
+
+    camera.fov = FOV;
+    camera.near = Math.max(1, dist - 24);
+    camera.far = dist + 36;
+    camera.position.set(sx, sy, dist);
+    camera.rotation.set(0, 0, 0);
+    camera.updateMatrixWorld(true);
+    camera.setViewOffset(visW, visH, ox - sx, sy - oy, visW, visH);
+  }
+
+  function shadowOnBoard(x, y, z) {
+    const t = (-0.58 - camZ) / (z - camZ);
+    return {
+      x: camX + t * (x - camX),
+      y: camY + t * (y - camY),
+    };
   }
 
   function resize() {
@@ -406,16 +436,8 @@ export function createView(canvas) {
         let s = 0;
         if (game.status === "playing") {
           for (let i = 0; i < cells.length; i++) {
-            place(
-              dropShadow,
-              s,
-              boardX(cells[i].c) + 0.16,
-              boardY(cells[i].r) - 0.2 + bob,
-              -0.58,
-              1,
-              1,
-              1
-            );
+            const hit = shadowOnBoard(boardX(cells[i].c), boardY(cells[i].r) + bob, 0.36);
+            place(dropShadow, s, hit.x, hit.y, -0.58, 1, 1, 1);
             s++;
           }
         }

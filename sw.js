@@ -1,4 +1,4 @@
-const CACHE = "litifangkuai-v6";
+const CACHE = "litifangkuai-v7";
 
 const ASSETS = [
   "./",
@@ -12,6 +12,7 @@ const ASSETS = [
   "./js/config.js",
   "./js/render.js",
   "./js/audio.js",
+  "./audio/silent.mp3",
   "./js/rounded-box.js",
   "./vendor/three.module.js",
   "./fonts/sans-500.woff2",
