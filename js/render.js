@@ -140,18 +140,23 @@ function makeWellTexture() {
   canvas.width = COLS * 48;
   canvas.height = VISIBLE_ROWS * 48;
   const g = canvas.getContext("2d");
-  g.fillStyle = "#14161c";
-  g.fillRect(0, 0, canvas.width, canvas.height);
+  g.clearRect(0, 0, canvas.width, canvas.height);
   for (let y = 0; y < VISIBLE_ROWS; y++) {
     for (let x = 0; x < COLS; x++) {
-      g.fillStyle = (x + y) % 2 === 0 ? "#1a1d25" : "#171a21";
-      g.fillRect(x * 48 + 2, y * 48 + 2, 44, 44);
-      g.strokeStyle = "rgba(255,255,255,0.035)";
-      g.strokeRect(x * 48 + 2.5, y * 48 + 2.5, 43, 43);
+      g.fillStyle = (x + y) % 2 === 0 ? "rgba(10, 14, 32, 0.78)" : "rgba(14, 18, 40, 0.7)";
+      g.fillRect(x * 48 + 1, y * 48 + 1, 46, 46);
+      g.strokeStyle = "rgba(198, 214, 255, 0.16)";
+      g.strokeRect(x * 48 + 1.5, y * 48 + 1.5, 45, 45);
     }
   }
+  const fade = g.createLinearGradient(0, 0, 0, 36);
+  fade.addColorStop(0, "rgba(255,255,255,0.1)");
+  fade.addColorStop(1, "rgba(255,255,255,0)");
+  g.fillStyle = fade;
+  g.fillRect(0, 0, canvas.width, 36);
   const tex = new CanvasTexture(canvas);
   tex.colorSpace = SRGBColorSpace;
+  tex.needsUpdate = true;
   return tex;
 }
 
@@ -159,12 +164,13 @@ export function createView(canvas) {
   const renderer = new WebGLRenderer({
     canvas,
     antialias: true,
-    alpha: false,
+    alpha: true,
+    premultipliedAlpha: false,
     powerPreference: "high-performance",
     failIfMajorPerformanceCaveat: false,
   });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-  renderer.setClearColor(0x101217, 1);
+  renderer.setClearColor(0x000000, 0);
   renderer.outputColorSpace = SRGBColorSpace;
   renderer.toneMapping = ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.18;
@@ -172,7 +178,7 @@ export function createView(canvas) {
   renderer.shadowMap.type = PCFSoftShadowMap;
 
   const scene = new Scene();
-  scene.background = new Color(0x101217);
+  scene.background = null;
 
   const camera = new PerspectiveCamera(FOV, 1, 0.1, 200);
 
@@ -225,19 +231,35 @@ export function createView(canvas) {
 
   const wellW = COLS * PITCH + 0.35;
   const wellH = VISIBLE_ROWS * PITCH + 0.35;
+  const glow = new Mesh(
+    new PlaneGeometry(wellW + 0.28, wellH + 0.28),
+    new MeshBasicMaterial({ color: 0x8d7cff, transparent: true, opacity: 0.38, depthWrite: false })
+  );
+  glow.position.set(0, 0, -0.78);
+  scene.add(glow);
+
   const well = new Mesh(
     new PlaneGeometry(wellW, wellH),
-    new MeshStandardMaterial({ map: makeWellTexture(), roughness: 0.95, metalness: 0.02 })
+    new MeshStandardMaterial({
+      map: makeWellTexture(),
+      color: 0x10162e,
+      transparent: true,
+      opacity: 0.92,
+      roughness: 0.18,
+      metalness: 0.08,
+      depthWrite: false,
+    })
   );
   well.position.set(0, 0, -0.62);
   well.receiveShadow = true;
   scene.add(well);
 
   const frameMat = new MeshStandardMaterial({
-    color: 0x3a3d46,
-    roughness: 0.55,
-    metalness: 0.2,
-    map: maps.color,
+    color: 0x1c2444,
+    roughness: 0.38,
+    metalness: 0.45,
+    emissive: 0x3a4ea8,
+    emissiveIntensity: 0.45,
   });
   const sideGeo = new RoundedBoxGeometry(0.42, wellH + 0.2, 0.9, 1, 0.06);
   const left = new Mesh(sideGeo, frameMat);

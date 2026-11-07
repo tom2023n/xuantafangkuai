@@ -1,4 +1,4 @@
-const CACHE = "litifangkuai-v3";
+const CACHE = "litifangkuai-v4";
 
 const ASSETS = [
   "./",
@@ -7,6 +7,7 @@ const ASSETS = [
   "./sw.js",
   "./css/game.css",
   "./js/main.js",
+  "./js/backdrop.js",
   "./js/logic.js",
   "./js/config.js",
   "./js/render.js",
