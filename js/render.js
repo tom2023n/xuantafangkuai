@@ -141,12 +141,8 @@ function makeWellTexture() {
   canvas.width = COLS * cell;
   canvas.height = VISIBLE_ROWS * cell;
   const g = canvas.getContext("2d");
-  const wash = g.createLinearGradient(0, 0, 0, canvas.height);
-  wash.addColorStop(0, "rgba(22, 28, 58, 0.5)");
-  wash.addColorStop(1, "rgba(8, 12, 28, 0.66)");
-  g.fillStyle = wash;
-  g.fillRect(0, 0, canvas.width, canvas.height);
-  g.strokeStyle = "rgba(214, 224, 255, 0.075)";
+  g.clearRect(0, 0, canvas.width, canvas.height);
+  g.strokeStyle = "rgba(214, 224, 255, 0.09)";
   g.lineWidth = 1;
   g.beginPath();
   for (let x = 0; x <= COLS; x++) {
@@ -179,7 +175,7 @@ export function createView(canvas) {
   renderer.setClearColor(0x000000, 0);
   renderer.outputColorSpace = SRGBColorSpace;
   renderer.toneMapping = ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.18;
+  renderer.toneMappingExposure = 1.02;
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = PCFSoftShadowMap;
 
@@ -194,13 +190,13 @@ export function createView(canvas) {
 
   const gloss = {
     bumpMap: maps.bump,
-    bumpScale: 0.05,
-    roughness: 0.22,
-    metalness: 0.08,
+    bumpScale: 0.035,
+    roughness: 0.28,
+    metalness: 0.06,
     color: 0xffffff,
   };
   const landedMat = new MeshStandardMaterial(gloss);
-  const activeMat = new MeshStandardMaterial({ ...gloss, roughness: 0.16, metalness: 0.12 });
+  const activeMat = new MeshStandardMaterial({ ...gloss, roughness: 0.2, metalness: 0.1 });
 
   const geo = new RoundedBoxGeometry(BOX_W, BOX_H, BOX_D, 2, BEVEL);
   const landed = new InstancedMesh(geo, landedMat, TOTAL_ROWS * COLS);
@@ -211,54 +207,84 @@ export function createView(canvas) {
   active.castShadow = true;
   scene.add(landed, active);
 
-  const hemi = new HemisphereLight(0xe7eef8, 0x2a241c, 0.7);
+  const hemi = new HemisphereLight(0xd5def0, 0x1a1420, 0.32);
   scene.add(hemi);
-  scene.add(new AmbientLight(0x6a7382, 0.35));
-  const key = new DirectionalLight(0xfff8ee, 3.1);
-  key.position.set(-7, 18, 14);
+  scene.add(new AmbientLight(0x3a4254, 0.12));
+  const key = new DirectionalLight(0xfff4e4, 2.85);
+  key.position.set(-8, 22, 12);
   key.castShadow = true;
-  key.shadow.mapSize.set(1024, 1024);
-  key.shadow.bias = -0.0008;
-  key.shadow.normalBias = 0.035;
+  key.shadow.mapSize.set(2048, 2048);
+  key.shadow.bias = -0.00035;
+  key.shadow.normalBias = 0.02;
+  key.shadow.radius = 2.5;
   key.shadow.camera.near = 2;
-  key.shadow.camera.far = 50;
-  key.shadow.camera.left = -14;
-  key.shadow.camera.right = 14;
-  key.shadow.camera.top = 16;
-  key.shadow.camera.bottom = -16;
-  key.target.position.set(0, 0, 0);
+  key.shadow.camera.far = 60;
+  key.shadow.camera.left = -16;
+  key.shadow.camera.right = 16;
+  key.shadow.camera.top = 18;
+  key.shadow.camera.bottom = -18;
+  key.target.position.set(0, -1, 0);
   scene.add(key, key.target);
-  const fill = new DirectionalLight(0xb7c6de, 0.55);
-  fill.position.set(10, 6, 8);
+  const fill = new DirectionalLight(0x8ea4c8, 0.28);
+  fill.position.set(12, 4, 10);
   scene.add(fill);
-  const rim = new DirectionalLight(0xffffff, 0.35);
-  rim.position.set(0, 4, -8);
+  const topLight = new DirectionalLight(0xfff8ee, 0.85);
+  topLight.position.set(0, 16, 6);
+  scene.add(topLight);
+  const rim = new DirectionalLight(0xc9d4ff, 0.4);
+  rim.position.set(2, 2, -12);
   scene.add(rim);
 
   const wellW = COLS * PITCH + 0.08;
   const wellH = VISIBLE_ROWS * PITCH + 0.08;
-  const glow = new Mesh(
-    new PlaneGeometry(wellW + 0.1, wellH + 0.1),
-    new MeshBasicMaterial({ color: 0x9aa6ff, transparent: true, opacity: 0.16, depthWrite: false })
+  const catcher = new Mesh(
+    new PlaneGeometry(wellW, wellH),
+    new MeshStandardMaterial({ color: 0x12182c, roughness: 1, metalness: 0 })
   );
-  glow.position.set(0, 0, -0.72);
+  catcher.position.set(0, 0, -0.62);
+  catcher.receiveShadow = true;
+  scene.add(catcher);
+
+  const glow = new Mesh(
+    new PlaneGeometry(wellW + 0.08, wellH + 0.08),
+    new MeshBasicMaterial({ color: 0x9aa6ff, transparent: true, opacity: 0.14, depthWrite: false })
+  );
+  glow.position.set(0, 0, -0.7);
   scene.add(glow);
 
   const well = new Mesh(
     new PlaneGeometry(wellW, wellH),
-    new MeshStandardMaterial({
+    new MeshBasicMaterial({
       map: makeWellTexture(),
-      color: 0xffffff,
       transparent: true,
-      opacity: 0.96,
-      roughness: 0.35,
-      metalness: 0.04,
+      opacity: 0.85,
       depthWrite: false,
     })
   );
-  well.position.set(0, 0, -0.55);
-  well.receiveShadow = true;
+  well.position.set(0, 0, -0.52);
+  well.renderOrder = 1;
   scene.add(well);
+
+  const blobTex = (() => {
+    const c = document.createElement("canvas");
+    c.width = c.height = 64;
+    const g = c.getContext("2d");
+    const grd = g.createRadialGradient(32, 32, 2, 32, 32, 32);
+    grd.addColorStop(0, "rgba(0,0,0,0.7)");
+    grd.addColorStop(1, "rgba(0,0,0,0)");
+    g.fillStyle = grd;
+    g.fillRect(0, 0, 64, 64);
+    const tex = new CanvasTexture(c);
+    tex.colorSpace = SRGBColorSpace;
+    return tex;
+  })();
+  const dropShadow = new InstancedMesh(
+    new PlaneGeometry(1.25, 1.25),
+    new MeshBasicMaterial({ map: blobTex, transparent: true, depthWrite: false, opacity: 0.55 })
+  );
+  dropShadow.frustumCulled = false;
+  dropShadow.renderOrder = 2;
+  scene.add(dropShadow);
 
   const rimMat = new MeshStandardMaterial({
     color: 0xd5dcf2,
@@ -305,8 +331,8 @@ export function createView(canvas) {
     const distH = boardH / 2 / Math.tan(vFov / 2);
     const distW = boardW / 2 / (Math.tan(vFov / 2) * camera.aspect);
     const dist = Math.max(distH, distW) * 1.05;
-    camera.position.set(0.55 + ox, 6.4 + oy, dist);
-    camera.lookAt(0, -0.55, 0);
+    camera.position.set(1.15 + ox, 11.2 + oy, dist);
+    camera.lookAt(0, -1.1, 0);
     camera.updateProjectionMatrix();
   }
 
@@ -376,15 +402,35 @@ export function createView(canvas) {
       if (game.piece && game.status !== "clearing") {
         const typeIndex = { I: 1, O: 2, T: 3, S: 4, Z: 5, J: 6, L: 7 }[game.piece.id] || 1;
         const bob = game.status === "home" ? Math.sin(now * 0.0022) * 0.08 : 0;
-        const pulse = game.status === "playing" ? 1.02 : 1;
-        drawCells(active, cellsOf(game.piece), {
-          z: 0.18,
-          scale: pulse,
+        const cells = cellsOf(game.piece);
+        let s = 0;
+        if (game.status === "playing") {
+          for (let i = 0; i < cells.length; i++) {
+            place(
+              dropShadow,
+              s,
+              boardX(cells[i].c) + 0.16,
+              boardY(cells[i].r) - 0.2 + bob,
+              -0.58,
+              1,
+              1,
+              1
+            );
+            s++;
+          }
+        }
+        commit(dropShadow, s);
+        drawCells(active, cells, {
+          z: 0.36,
+          scale: 1,
           type: typeIndex,
           mul: 1,
           dy: bob,
         });
-      } else commit(active, 0);
+      } else {
+        commit(active, 0);
+        commit(dropShadow, 0);
+      }
 
       renderer.render(scene, camera);
     },
