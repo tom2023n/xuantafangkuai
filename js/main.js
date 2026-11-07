@@ -1,10 +1,13 @@
 import { BEST_KEY, COLS, MUTE_KEY } from "./config.js";
 import { createAudio } from "./audio.js";
-import { TowerGame, mulberry32 } from "./logic.js";
+import { BlockGame, mulberry32 } from "./logic.js";
 import { createView } from "./render.js";
 
-const CLEAR_NAME = { 1: "单环", 2: "双环", 3: "三环", 4: "四环" };
-const PX_PER_COL = 30;
+const CLEAR_NAME = { 1: "单行", 2: "双行", 3: "三行", 4: "四行" };
+const DAS_DELAY = 170;
+const DAS_REPEAT = 45;
+const TAP_SLOP = 14;
+const AXIS_LOCK = 20;
 
 const canvas = document.querySelector("#view");
 const hud = document.querySelector("#hud");
@@ -31,17 +34,16 @@ const seed = params.get("seed");
 const random = seed != null && seed !== "" ? mulberry32(Number(seed) || 1) : Math.random;
 
 const audio = createAudio();
-const game = new TowerGame(random);
-const reduced = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+const game = new BlockGame(random);
 
 let view = null;
-let frontVisual = 0;
 let dragging = null;
 let softHold = false;
 let keySoft = false;
 let bestAtRun = 0;
 let toastTimer = 0;
-let loopStarted = false;
+const keys = { left: false, right: false };
+let das = null;
 
 function loadNum(key) {
   try {
@@ -67,6 +69,11 @@ function persistBest() {
   const prev = loadBest();
   if (game.score > prev) save(BEST_KEY, game.score);
   return prev;
+}
+
+function columnPx() {
+  const w = canvas.clientWidth || 390;
+  return Math.max(30, Math.min(46, (w - 28) / COLS));
 }
 
 function syncMute() {
@@ -108,28 +115,31 @@ function showToast(text) {
 }
 
 function handleEvents(events) {
-  let nudged = false;
+  let shifted = false;
   for (let i = 0; i < events.length; i++) {
     const e = events[i];
-    if (e.type === "nudge") nudged = true;
-    else if (e.type === "rotate") audio.playRotate();
+    if (e.type === "shift") shifted = true;
+    else if (e.type === "rotate" || e.type === "hold") audio.playRotate();
     else if (e.type === "hard") audio.playHard();
     else if (e.type === "lock") audio.playLock(e.hard);
     else if (e.type === "clear") {
       audio.playClear(e.count);
       showToast(CLEAR_NAME[e.count] || "消除");
-      view?.celebrate(e.rows, frontVisual);
       view?.shake(0.08 * e.count);
       persistBest();
     } else if (e.type === "level") audio.playLevel();
     else if (e.type === "over") {
       audio.playOver();
+      toast.classList.remove("show");
       persistBest();
       softHold = false;
       keySoft = false;
+      keys.left = false;
+      keys.right = false;
+      das = null;
     }
   }
-  if (nudged) audio.playMove();
+  if (shifted) audio.playMove();
   if (events.length) sync();
 }
 
@@ -138,17 +148,17 @@ function begin() {
   audio.playStart();
   bestAtRun = loadBest();
   game.start();
-  frontVisual = game.front;
   dragging = null;
   softHold = false;
+  das = null;
   sync();
 }
 
 function goHome() {
   game.goHome();
-  frontVisual = 0;
   dragging = null;
   softHold = false;
+  das = null;
   sync();
 }
 
@@ -170,20 +180,6 @@ function toggleMute() {
   syncMute();
 }
 
-function seekFront(desired) {
-  let guard = 0;
-  while (game.front < desired - 0.5 && guard++ < COLS) {
-    if (!game.nudge(1)) break;
-  }
-  guard = 0;
-  while (game.front > desired + 0.5 && guard++ < COLS) {
-    if (!game.nudge(-1)) break;
-  }
-  const slack = Math.max(-0.42, Math.min(0.42, desired - game.front));
-  frontVisual = game.front + slack;
-  handleEvents(game.drainEvents());
-}
-
 function onPointerDown(e) {
   if (game.status !== "playing") return;
   if (e.target !== canvas) return;
@@ -193,8 +189,8 @@ function onPointerDown(e) {
     x: e.clientX,
     y: e.clientY,
     t: performance.now(),
-    front0: game.front,
     mode: null,
+    cols: 0,
     lastY: e.clientY,
     lastT: performance.now(),
     hard: false,
@@ -206,18 +202,31 @@ function onPointerMove(e) {
   const dx = e.clientX - dragging.x;
   const dy = e.clientY - dragging.y;
   if (!dragging.mode) {
-    if (Math.hypot(dx, dy) < 12) return;
-    dragging.mode = Math.abs(dx) > Math.abs(dy) ? "h" : "v";
+    if (Math.hypot(dx, dy) < AXIS_LOCK) return;
+    if (dy > Math.abs(dx) * 1.25 && dy > 0) dragging.mode = "v";
+    else if (Math.abs(dx) > Math.abs(dy) * 1.25) dragging.mode = "h";
+    else return;
   }
   if (dragging.mode === "h") {
-    seekFront(dragging.front0 - dx / PX_PER_COL);
-  } else if (dy > 16) {
+    const step = columnPx();
+    const q = dx / step;
+    const want = q < 0 ? Math.ceil(q) : Math.floor(q);
+    while (dragging.cols < want) {
+      if (!game.shift(1)) break;
+      dragging.cols += 1;
+    }
+    while (dragging.cols > want) {
+      if (!game.shift(-1)) break;
+      dragging.cols -= 1;
+    }
+    handleEvents(game.drainEvents());
+  } else if (dy > 22) {
     softHold = true;
     const now = performance.now();
     const vy = (e.clientY - dragging.lastY) / Math.max(8, now - dragging.lastT);
     dragging.lastY = e.clientY;
     dragging.lastT = now;
-    if (!dragging.hard && dy > 78 && vy > 0.9) {
+    if (!dragging.hard && dy > 78 && vy > 0.85) {
       dragging.hard = true;
       softHold = false;
       game.hardDrop();
@@ -232,7 +241,7 @@ function onPointerUp(e) {
   const dx = e.clientX - dragging.x;
   const dy = e.clientY - dragging.y;
   const dt = performance.now() - dragging.t;
-  if (!dragging.mode && dt < 280 && Math.hypot(dx, dy) < 14) {
+  if (!dragging.mode && dt < 300 && Math.hypot(dx, dy) < TAP_SLOP) {
     game.rotate(1);
     handleEvents(game.drainEvents());
   }
@@ -264,7 +273,11 @@ function bindRepeat(btn, fn) {
   btn.addEventListener("pointerdown", (e) => {
     e.preventDefault();
     e.stopPropagation();
-    btn.setPointerCapture?.(e.pointerId);
+    try {
+      btn.setPointerCapture?.(e.pointerId);
+    } catch {
+      /* pointer already released */
+    }
     if (game.status !== "playing") return;
     fn();
     handleEvents(game.drainEvents());
@@ -279,8 +292,8 @@ function bindRepeat(btn, fn) {
         fn();
         handleEvents(game.drainEvents());
         sync();
-      }, 68);
-    }, 210);
+      }, DAS_REPEAT);
+    }, DAS_DELAY);
   });
   btn.addEventListener("pointerup", stop);
   btn.addEventListener("pointercancel", stop);
@@ -317,10 +330,16 @@ function boot() {
   document.querySelector("#btn-pause-home").addEventListener("click", goHome);
   document.querySelector("#btn-retry").addEventListener("click", begin);
   document.querySelector("#btn-over-home").addEventListener("click", goHome);
+  document.querySelector("#btn-hold").addEventListener("click", () => {
+    if (game.status !== "playing") return;
+    game.hold();
+    handleEvents(game.drainEvents());
+    sync();
+  });
   document.querySelectorAll(".js-mute").forEach((btn) => btn.addEventListener("click", toggleMute));
 
-  bindRepeat(document.querySelector("#btn-left"), () => game.nudge(1));
-  bindRepeat(document.querySelector("#btn-right"), () => game.nudge(-1));
+  bindRepeat(document.querySelector("#btn-left"), () => game.shift(-1));
+  bindRepeat(document.querySelector("#btn-right"), () => game.shift(1));
   bindPress(document.querySelector("#btn-rot"), () => game.rotate(1));
   bindPress(document.querySelector("#btn-hard"), () => game.hardDrop());
   const softBtn = document.querySelector("#btn-soft");
@@ -338,9 +357,7 @@ function boot() {
   softBtn.addEventListener("lostpointercapture", releaseSoft);
 
   window.addEventListener("keydown", (e) => {
-    if (e.code === "ArrowLeft" || e.code === "ArrowRight" || e.code === "ArrowDown" || e.code === "ArrowUp" || e.code === "Space") {
-      e.preventDefault();
-    }
+    if (["ArrowLeft", "ArrowRight", "ArrowDown", "ArrowUp", "Space"].includes(e.code)) e.preventDefault();
     if (e.code === "KeyM") toggleMute();
     if (e.code === "Enter") {
       if (game.status === "home" || game.status === "over") begin();
@@ -351,19 +368,19 @@ function boot() {
     }
     if (e.code === "Escape" || e.code === "KeyP") togglePause();
     if (game.status !== "playing") return;
-    if (e.code === "ArrowLeft") {
-      game.nudge(1);
-      handleEvents(game.drainEvents());
-    } else if (e.code === "ArrowRight") {
-      game.nudge(-1);
-      handleEvents(game.drainEvents());
-    } else if (e.code === "ArrowUp" || e.code === "KeyX") {
+    if (e.code === "ArrowLeft") keys.left = true;
+    else if (e.code === "ArrowRight") keys.right = true;
+    else if (e.code === "ArrowUp" || e.code === "KeyX") {
       if (e.repeat) return;
       game.rotate(1);
       handleEvents(game.drainEvents());
     } else if (e.code === "KeyZ") {
       if (e.repeat) return;
       game.rotate(-1);
+      handleEvents(game.drainEvents());
+    } else if (e.code === "KeyC") {
+      if (e.repeat) return;
+      game.hold();
       handleEvents(game.drainEvents());
     } else if (e.code === "ArrowDown") keySoft = true;
     else if (e.code === "Space") {
@@ -374,7 +391,15 @@ function boot() {
     }
   });
   window.addEventListener("keyup", (e) => {
+    if (e.code === "ArrowLeft") keys.left = false;
+    if (e.code === "ArrowRight") keys.right = false;
     if (e.code === "ArrowDown") keySoft = false;
+  });
+  window.addEventListener("blur", () => {
+    keys.left = false;
+    keys.right = false;
+    keySoft = false;
+    das = null;
   });
 
   document.addEventListener("visibilitychange", () => {
@@ -389,22 +414,33 @@ function boot() {
   const frame = (now) => {
     const dt = Math.min(34, now - last);
     last = now;
-    if (game.status === "home") {
-      frontVisual = reduced ? 0 : Math.sin(now * 0.00032) * 1.2;
-    } else if (!dragging) {
-      const diff = game.front - frontVisual;
-      frontVisual += diff * Math.min(1, dt / 85);
-      if (Math.abs(diff) < 0.001) frontVisual = game.front;
+    if (game.status === "playing") {
+      const dir = keys.left === keys.right ? 0 : keys.left ? -1 : 1;
+      if (!dir) das = null;
+      else if (!das || das.dir !== dir) {
+        das = { dir, acc: 0, phase: "delay" };
+        game.shift(dir);
+        handleEvents(game.drainEvents());
+      } else {
+        das.acc += dt;
+        const gate = das.phase === "delay" ? DAS_DELAY : DAS_REPEAT;
+        if (das.acc >= gate) {
+          das.phase = "repeat";
+          das.acc = 0;
+          game.shift(dir);
+          handleEvents(game.drainEvents());
+        }
+      }
     }
     if (game.status === "playing" || game.status === "clearing") {
       game.step(dt, { soft: softHold || keySoft });
     }
     handleEvents(game.drainEvents());
-    view.draw(game, frontVisual, dt, now);
+    view.draw(game, dt, now);
     requestAnimationFrame(frame);
   };
   sync();
-  view.draw(game, frontVisual, 16, performance.now());
+  view.draw(game, 16, performance.now());
   requestAnimationFrame(frame);
   window.game = game;
 

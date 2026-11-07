@@ -312,7 +312,7 @@ h1 {
   width: min(86vw, 340px);
   padding: 28px 22px 22px;
   border-radius: 22px;
-  background: rgba(16, 18, 24, 0.92);
+  background: rgba(14, 16, 22, 0.97);
   border: 1px solid rgba(243, 238, 230, 0.12);
   text-align: center;
   box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
