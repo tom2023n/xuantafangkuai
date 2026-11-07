@@ -4,10 +4,10 @@ export const HIDDEN_ROWS = 2;
 export const TOTAL_ROWS = VISIBLE_ROWS + HIDDEN_ROWS;
 
 export const PITCH = 1;
-export const BOX_W = 0.86;
-export const BOX_H = 0.86;
-export const BOX_D = 0.78;
-export const BEVEL = 0.055;
+export const BOX_W = 0.88;
+export const BOX_H = 0.88;
+export const BOX_D = 0.98;
+export const BEVEL = 0.1;
 
 export const LOCK_MS = 500;
 export const MAX_LOCK_RESETS = 12;
