@@ -1,4 +1,5 @@
 import {
+  CLEAR_MS,
   COLS,
   FALL_MS,
   HIDDEN_ROWS,
@@ -8,15 +9,10 @@ import {
   PIECE_IDS,
   SOFT_MS,
   TOTAL_ROWS,
-  CLEAR_MS,
   gravityMs,
-  mod,
 } from "./config.js";
 
-/**
- * Cells are [column, row] with row increasing downward.
- * Four rotation states, wall-kick offsets in the same space.
- */
+/** Cells are [column, row], row increasing downward. Four wall-kick states. */
 export const SHAPES = {
   I: [
     [[0, 1], [1, 1], [2, 1], [3, 1]],
@@ -118,7 +114,6 @@ export function findFullRows(board) {
   return rows;
 }
 
-/** Drop surviving rows. `fallRows[newRow]` is how many rows that line moved down. */
 export function compactBoard(board, cleared) {
   const gone = new Set(cleared);
   const next = emptyBoard();
@@ -135,19 +130,14 @@ export function compactBoard(board, cleared) {
 
 function buildShowcase() {
   const board = emptyBoard();
-  const start = HIDDEN_ROWS + 2;
-  for (let r = start; r < TOTAL_ROWS; r++) {
-    for (let c = 0; c < COLS; c++) {
-      const d = Math.min(c, COLS - c);
-      if (d <= 1) continue;
-      if (r === start + 7 && d > 2 && d < 6) continue;
-      if ((r * 5 + c * 3) % 17 === 0) continue;
-      board[r][c] = 1 + ((r * 3 + c * 5) % 7);
-    }
+  const base = TOTAL_ROWS - 1;
+  for (let c = 0; c < COLS; c++) {
+    const height = 3 + ((c * 3) % 5);
+    for (let k = 0; k < height; k++) board[base - k][c] = 1 + ((c + k) % 7);
   }
-  board[start + 9][1] = 3;
-  board[start + 10][1] = 3;
-  board[start + 10][2] = 5;
+  board[base][2] = 0;
+  board[base - 1][6] = 0;
+  board[base - 2][4] = 0;
   return board;
 }
 
@@ -155,32 +145,26 @@ export function cellsOf(piece) {
   const shape = SHAPES[piece.id][piece.rot];
   const out = [];
   for (let i = 0; i < shape.length; i++) {
-    const x = shape[i][0];
-    const y = shape[i][1];
-    out.push({
-      c: piece.col + x,
-      r: piece.row + y,
-      col: mod(piece.col + x, COLS),
-    });
+    out.push({ c: piece.col + shape[i][0], r: piece.row + shape[i][1] });
   }
   return out;
 }
 
-export class TowerGame {
+export class BlockGame {
   constructor(random = Math.random) {
     this.random = random;
     this.events = [];
-    this.best = 0;
     this.goHome();
   }
 
   goHome() {
     this.status = "home";
     this.board = buildShowcase();
-    this.front = 0;
-    this.piece = { id: "T", rot: 0, col: -1, row: HIDDEN_ROWS + 8 };
+    this.piece = { id: "T", rot: 0, col: 3, row: HIDDEN_ROWS };
     this.queue = ["L", "I", "O"];
     this.bag = [];
+    this.held = null;
+    this.holdLocked = false;
     this.score = 0;
     this.lines = 0;
     this.level = 1;
@@ -202,9 +186,10 @@ export class TowerGame {
   start() {
     this.status = "playing";
     this.board = emptyBoard();
-    this.front = 0;
     this.bag = [];
     this.queue = [this.take(), this.take(), this.take()];
+    this.held = null;
+    this.holdLocked = false;
     this.score = 0;
     this.lines = 0;
     this.level = 1;
@@ -257,7 +242,7 @@ export class TowerGame {
       maxX = Math.max(maxX, shape[i][0]);
       minY = Math.min(minY, shape[i][1]);
     }
-    const col = Math.round(this.front - (minX + maxX) / 2);
+    const col = Math.round((COLS - 1) / 2 - (minX + maxX) / 2);
     const row = HIDDEN_ROWS - 1 - minY;
     this.piece = { id, rot: 0, col, row };
     this.dropAcc = 0;
@@ -280,9 +265,9 @@ export class TowerGame {
   collides(id, rot, col, row) {
     const shape = SHAPES[id][rot];
     for (let i = 0; i < shape.length; i++) {
-      const c = mod(col + shape[i][0], COLS);
+      const c = col + shape[i][0];
       const r = row + shape[i][1];
-      if (r >= TOTAL_ROWS) return true;
+      if (c < 0 || c >= COLS || r >= TOTAL_ROWS) return true;
       if (r >= 0 && this.board[r][c]) return true;
     }
     return false;
@@ -295,9 +280,7 @@ export class TowerGame {
 
   hiddenOccupied() {
     for (let r = 0; r < HIDDEN_ROWS; r++) {
-      for (let c = 0; c < COLS; c++) {
-        if (this.board[r][c]) return true;
-      }
+      for (let c = 0; c < COLS; c++) if (this.board[r][c]) return true;
     }
     return false;
   }
@@ -308,31 +291,25 @@ export class TowerGame {
       if (wasGrounded && this.lockResets < MAX_LOCK_RESETS) {
         this.lockElapsed = 0;
         this.lockResets++;
-      } else if (!wasGrounded) {
-        this.lockElapsed = 0;
-      }
-    } else {
-      this.lockElapsed = 0;
-    }
+      } else if (!wasGrounded) this.lockElapsed = 0;
+    } else this.lockElapsed = 0;
   }
 
-  nudge(dir) {
+  shift(dir) {
     if (this.status !== "playing" || !this.piece) return false;
     const col = this.piece.col + dir;
     if (this.collides(this.piece.id, this.piece.rot, col, this.piece.row)) return false;
     const was = this.grounded;
     this.piece.col = col;
-    this.front += dir;
     this.afterAdjust(was);
-    this.events.push({ type: "nudge" });
+    this.events.push({ type: "shift" });
     return true;
   }
 
   rotate(dir) {
-    if (this.status !== "playing" || !this.piece) return false;
-    if (this.piece.id === "O") return false;
+    if (this.status !== "playing" || !this.piece || this.piece.id === "O") return false;
     const from = this.piece.rot;
-    const to = mod(from + dir, 4);
+    const to = (from + dir + 4) % 4;
     const table = this.piece.id === "I" ? I_KICKS : JLSTZ_KICKS;
     const kicks = table[`${from}>${to}`];
     const was = this.grounded;
@@ -349,6 +326,23 @@ export class TowerGame {
       }
     }
     return false;
+  }
+
+  hold() {
+    if (this.status !== "playing" || !this.piece || this.holdLocked) return false;
+    const id = this.piece.id;
+    this.holdLocked = true;
+    if (this.held) {
+      const swap = this.held;
+      this.held = id;
+      this.placeNew(swap);
+    } else {
+      this.held = id;
+      this.piece = null;
+      this.spawnFromQueue();
+    }
+    this.events.push({ type: "hold" });
+    return this.status === "playing";
   }
 
   tryDown(soft) {
@@ -371,13 +365,6 @@ export class TowerGame {
     return dist;
   }
 
-  ghostRow() {
-    if (!this.piece) return 0;
-    let row = this.piece.row;
-    while (!this.collides(this.piece.id, this.piece.rot, this.piece.col, row + 1)) row++;
-    return row;
-  }
-
   lock() {
     if (!this.piece) return;
     const cells = cellsOf(this.piece);
@@ -386,11 +373,12 @@ export class TowerGame {
     for (let i = 0; i < cells.length; i++) {
       const cell = cells[i];
       if (cell.r < 0) above = true;
-      else if (cell.r < TOTAL_ROWS) this.board[cell.r][cell.col] = type;
+      else if (cell.r < TOTAL_ROWS) this.board[cell.r][cell.c] = type;
     }
     const full = findFullRows(this.board);
     this.aboveBoard = above;
     this.piece = null;
+    this.holdLocked = false;
     this.events.push({ type: "lock", hard: this._hard });
     if (full.length) {
       this.pendingRows = full;
@@ -400,9 +388,7 @@ export class TowerGame {
       this.events.push({ type: "clear", count: full.length, rows: full.slice() });
       return;
     }
-    this.popCells = cells
-      .filter((cell) => cell.r >= 0 && cell.r < TOTAL_ROWS)
-      .map((cell) => ({ c: cell.col, r: cell.r }));
+    this.popCells = cells.filter((cell) => cell.r >= 0 && cell.r < TOTAL_ROWS);
     this.popAge = 0;
     if (above || this.hiddenOccupied()) {
       this.end();
@@ -412,8 +398,7 @@ export class TowerGame {
   }
 
   scoreLines(count) {
-    const gained = (LINE_SCORE[count] || 0) * this.level;
-    this.score += gained;
+    this.score += (LINE_SCORE[count] || 0) * this.level;
     this.lines += count;
     const next = 1 + Math.floor(this.lines / 10);
     if (next > this.level) {
@@ -458,7 +443,6 @@ export class TowerGame {
       return;
     }
     if (this.status !== "playing" || !this.piece) return;
-
     const interval = soft ? Math.min(SOFT_MS, gravityMs(this.level)) : gravityMs(this.level);
     this.dropAcc += dt;
     let steps = 0;
@@ -490,10 +474,11 @@ export class TowerGame {
     return {
       status: this.status,
       board: this.board.map((row) => row.slice()),
-      front: this.front,
       piece: this.piece ? { ...this.piece } : null,
       queue: this.queue.slice(),
       bag: this.bag.slice(),
+      held: this.held,
+      holdLocked: this.holdLocked,
       score: this.score,
       lines: this.lines,
       level: this.level,
@@ -512,10 +497,11 @@ export class TowerGame {
   restore(s) {
     this.status = s.status;
     this.board = s.board.map((row) => row.slice());
-    this.front = s.front;
     this.piece = s.piece ? { ...s.piece } : null;
     this.queue = s.queue.slice();
     this.bag = s.bag.slice();
+    this.held = s.held;
+    this.holdLocked = s.holdLocked;
     this.score = s.score;
     this.lines = s.lines;
     this.level = s.level;

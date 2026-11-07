@@ -7,9 +7,9 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="旋塔方块">
-  <meta name="description" content="绕着石塔下落的方块。凑满一整环即可消除。">
-  <title>旋塔方块</title>
+  <meta name="apple-mobile-web-app-title" content="立体方块">
+  <meta name="description" content="方块层层下落，排满一行即可消除。">
+  <title>立体方块</title>
   <link rel="manifest" href="manifest.json">
   <link rel="icon" href="icons/icon-192.png" type="image/png">
   <link rel="apple-touch-icon" href="icons/icon-180.png">
@@ -17,18 +17,30 @@
 </head>
 <body>
   <div id="app">
-    <canvas id="view" aria-label="石塔棋盘"></canvas>
+    <canvas id="view" aria-label="方块棋盘"></canvas>
     <div id="vignette"></div>
     <header id="hud" hidden>
-      <div class="stat-grid">
-        <div class="stat"><em>分数</em><strong id="hud-score">0</strong></div>
-        <div class="stat"><em>最高</em><strong id="hud-best">0</strong></div>
-        <div class="stat"><em>等级</em><strong id="hud-level">1</strong></div>
-        <div class="stat"><em>消除</em><strong id="hud-lines">0</strong></div>
+      <div class="hud-top">
+        <div class="stat-grid">
+          <div class="stat"><em>分数</em><strong id="hud-score">0</strong></div>
+          <div class="stat"><em>最高</em><strong id="hud-best">0</strong></div>
+          <div class="stat"><em>等级</em><strong id="hud-level">1</strong></div>
+          <div class="stat"><em>消除</em><strong id="hud-lines">0</strong></div>
+        </div>
+        <div class="hud-btns">
+          <button type="button" class="js-mute" aria-pressed="true">声音</button>
+          <button type="button" id="btn-pause">暂停</button>
+        </div>
       </div>
-      <div class="hud-btns">
-        <button type="button" class="js-mute" aria-pressed="true">声音</button>
-        <button type="button" id="btn-pause">暂停</button>
+      <div class="preview-row">
+        <button type="button" id="btn-hold" class="preview-box">
+          <span class="preview-label">保留</span>
+          <div id="hold-piece" class="preview-stage"><span class="preview-empty">空</span></div>
+        </button>
+        <div class="preview-box next-box">
+          <span class="preview-label">下一个</span>
+          <div id="next-pieces" class="next-pieces"></div>
+        </div>
       </div>
     </header>
     <p id="toast" hidden></p>
@@ -41,16 +53,17 @@
     </footer>
     <section id="screen-home" class="screen">
       <div class="home-card">
-        <p class="eyebrow">环塔落子</p>
-        <h1>旋塔方块</h1>
-        <p class="tagline">方块沿塔身坠落，凑满一整环即可消除。</p>
+        <p class="eyebrow">下落消除</p>
+        <h1>立体方块</h1>
+        <p class="tagline">方块层层下落，排满一行即可消除。</p>
         <p class="best-line">最高分 <strong id="home-best">0</strong></p>
         <button type="button" id="btn-start" class="btn primary">开始游戏</button>
         <ul class="help">
-          <li><span>左右滑动</span>转动塔身</li>
+          <li><span>左右滑动</span>移动方块</li>
           <li><span>轻点</span>旋转方块</li>
           <li><span>下滑</span>加速下落</li>
           <li><span>快速下滑</span>直接落底</li>
+          <li><span>保留</span>留下当前方块</li>
         </ul>
         <div class="home-tools">
           <button type="button" class="js-mute" aria-pressed="true">声音</button>
@@ -60,7 +73,7 @@
     <section id="screen-pause" class="screen" hidden>
       <div class="card">
         <h2>已暂停</h2>
-        <p class="sub">塔身静止，随时继续</p>
+        <p class="sub">局面暂停，随时继续</p>
         <div class="stack">
           <button type="button" id="btn-resume" class="btn primary">继续游戏</button>
           <button type="button" id="btn-pause-restart" class="btn">重新开始</button>
@@ -83,7 +96,7 @@
     </section>
     <p id="fatal" class="fatal" hidden></p>
   </div>
-  <noscript>请启用 JavaScript 后再玩旋塔方块。</noscript>
+  <noscript>请启用 JavaScript 后再玩立体方块。</noscript>
   <script type="module" src="js/main.js"></script>
 </body>
 </html>
