@@ -1,4 +1,4 @@
-import { BEST_KEY, COLS, MUTE_KEY, PIECE_COLOR } from "./config.js";
+import { BEST_KEY, COLS, MUSIC_KEY, MUTE_KEY, PIECE_COLOR } from "./config.js";
 import { createAudio } from "./audio.js";
 import { BlockGame, SHAPES, mulberry32 } from "./logic.js";
 import { createView } from "./render.js";
@@ -88,6 +88,15 @@ function syncMute() {
   });
 }
 
+function syncMusic() {
+  const on = audio.musicOn;
+  document.querySelectorAll(".js-music").forEach((btn) => {
+    btn.setAttribute("aria-pressed", on ? "true" : "false");
+    btn.textContent = "音乐";
+    btn.classList.toggle("is-off", !on);
+  });
+}
+
 function miniMarkup(id) {
   const cells = SHAPES[id][0];
   let minX = Infinity;
@@ -159,7 +168,9 @@ function handleEvents(events) {
   for (let i = 0; i < events.length; i++) {
     const e = events[i];
     if (e.type === "shift") shifted = true;
-    else if (e.type === "rotate" || e.type === "hold") audio.playRotate();
+    else if (e.type === "tick") audio.playTick();
+    else if (e.type === "rotate") audio.playRotate();
+    else if (e.type === "hold") audio.playHold();
     else if (e.type === "hard") audio.playHard();
     else if (e.type === "lock") audio.playLock(e.hard);
     else if (e.type === "clear") {
@@ -218,6 +229,13 @@ function toggleMute() {
   const muted = audio.toggle();
   save(MUTE_KEY, muted ? "1" : "0");
   syncMute();
+}
+
+function toggleMusic() {
+  audio.unlock();
+  const on = audio.toggleMusic();
+  save(MUSIC_KEY, on ? "1" : "0");
+  syncMusic();
 }
 
 function onPointerDown(e) {
@@ -350,7 +368,13 @@ function boot() {
     return;
   }
   if (loadNum(MUTE_KEY) === 1) audio.setMuted(true);
+  try {
+    if (localStorage.getItem(MUSIC_KEY) === "0") audio.setMusic(false);
+  } catch {
+    /* private mode */
+  }
   syncMute();
+  syncMusic();
   startBackdrop(document.querySelector("#bokeh"));
   view.resize();
   window.addEventListener("resize", () => view.resize());
@@ -364,13 +388,29 @@ function boot() {
   document.querySelector("#btn-start").addEventListener("click", begin);
   document.querySelector("#btn-pause").addEventListener("click", () => {
     audio.unlock();
+    audio.playTap();
     togglePause();
   });
-  document.querySelector("#btn-resume").addEventListener("click", () => game.resume() && sync());
-  document.querySelector("#btn-pause-restart").addEventListener("click", begin);
-  document.querySelector("#btn-pause-home").addEventListener("click", goHome);
-  document.querySelector("#btn-retry").addEventListener("click", begin);
-  document.querySelector("#btn-over-home").addEventListener("click", goHome);
+  document.querySelector("#btn-resume").addEventListener("click", () => {
+    audio.playTap();
+    if (game.resume()) sync();
+  });
+  document.querySelector("#btn-pause-restart").addEventListener("click", () => {
+    audio.playTap();
+    begin();
+  });
+  document.querySelector("#btn-pause-home").addEventListener("click", () => {
+    audio.playTap();
+    goHome();
+  });
+  document.querySelector("#btn-retry").addEventListener("click", () => {
+    audio.playTap();
+    begin();
+  });
+  document.querySelector("#btn-over-home").addEventListener("click", () => {
+    audio.playTap();
+    goHome();
+  });
   document.querySelector("#btn-hold").addEventListener("click", () => {
     if (game.status !== "playing") return;
     game.hold();
@@ -378,6 +418,8 @@ function boot() {
     sync();
   });
   document.querySelectorAll(".js-mute").forEach((btn) => btn.addEventListener("click", toggleMute));
+  document.querySelectorAll(".js-music").forEach((btn) => btn.addEventListener("click", toggleMusic));
+  document.addEventListener("pointerdown", () => audio.unlock(), { passive: true });
 
   bindRepeat(document.querySelector("#btn-left"), () => game.shift(-1));
   bindRepeat(document.querySelector("#btn-right"), () => game.shift(1));

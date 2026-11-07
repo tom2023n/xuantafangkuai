@@ -136,24 +136,30 @@ function makeMaps() {
 }
 
 function makeWellTexture() {
+  const cell = 64;
   const canvas = document.createElement("canvas");
-  canvas.width = COLS * 48;
-  canvas.height = VISIBLE_ROWS * 48;
+  canvas.width = COLS * cell;
+  canvas.height = VISIBLE_ROWS * cell;
   const g = canvas.getContext("2d");
-  g.clearRect(0, 0, canvas.width, canvas.height);
-  for (let y = 0; y < VISIBLE_ROWS; y++) {
-    for (let x = 0; x < COLS; x++) {
-      g.fillStyle = (x + y) % 2 === 0 ? "rgba(10, 14, 32, 0.78)" : "rgba(14, 18, 40, 0.7)";
-      g.fillRect(x * 48 + 1, y * 48 + 1, 46, 46);
-      g.strokeStyle = "rgba(198, 214, 255, 0.16)";
-      g.strokeRect(x * 48 + 1.5, y * 48 + 1.5, 45, 45);
-    }
+  const wash = g.createLinearGradient(0, 0, 0, canvas.height);
+  wash.addColorStop(0, "rgba(22, 28, 58, 0.5)");
+  wash.addColorStop(1, "rgba(8, 12, 28, 0.66)");
+  g.fillStyle = wash;
+  g.fillRect(0, 0, canvas.width, canvas.height);
+  g.strokeStyle = "rgba(214, 224, 255, 0.075)";
+  g.lineWidth = 1;
+  g.beginPath();
+  for (let x = 0; x <= COLS; x++) {
+    const px = x * cell + 0.5;
+    g.moveTo(px, 0);
+    g.lineTo(px, canvas.height);
   }
-  const fade = g.createLinearGradient(0, 0, 0, 36);
-  fade.addColorStop(0, "rgba(255,255,255,0.1)");
-  fade.addColorStop(1, "rgba(255,255,255,0)");
-  g.fillStyle = fade;
-  g.fillRect(0, 0, canvas.width, 36);
+  for (let y = 0; y <= VISIBLE_ROWS; y++) {
+    const py = y * cell + 0.5;
+    g.moveTo(0, py);
+    g.lineTo(canvas.width, py);
+  }
+  g.stroke();
   const tex = new CanvasTexture(canvas);
   tex.colorSpace = SRGBColorSpace;
   tex.needsUpdate = true;
@@ -229,51 +235,53 @@ export function createView(canvas) {
   rim.position.set(0, 4, -8);
   scene.add(rim);
 
-  const wellW = COLS * PITCH + 0.35;
-  const wellH = VISIBLE_ROWS * PITCH + 0.35;
+  const wellW = COLS * PITCH + 0.08;
+  const wellH = VISIBLE_ROWS * PITCH + 0.08;
   const glow = new Mesh(
-    new PlaneGeometry(wellW + 0.28, wellH + 0.28),
-    new MeshBasicMaterial({ color: 0x8d7cff, transparent: true, opacity: 0.38, depthWrite: false })
+    new PlaneGeometry(wellW + 0.1, wellH + 0.1),
+    new MeshBasicMaterial({ color: 0x9aa6ff, transparent: true, opacity: 0.16, depthWrite: false })
   );
-  glow.position.set(0, 0, -0.78);
+  glow.position.set(0, 0, -0.72);
   scene.add(glow);
 
   const well = new Mesh(
     new PlaneGeometry(wellW, wellH),
     new MeshStandardMaterial({
       map: makeWellTexture(),
-      color: 0x10162e,
+      color: 0xffffff,
       transparent: true,
-      opacity: 0.92,
-      roughness: 0.18,
-      metalness: 0.08,
+      opacity: 0.96,
+      roughness: 0.35,
+      metalness: 0.04,
       depthWrite: false,
     })
   );
-  well.position.set(0, 0, -0.62);
+  well.position.set(0, 0, -0.55);
   well.receiveShadow = true;
   scene.add(well);
 
-  const frameMat = new MeshStandardMaterial({
-    color: 0x1c2444,
-    roughness: 0.38,
-    metalness: 0.45,
-    emissive: 0x3a4ea8,
-    emissiveIntensity: 0.45,
+  const rimMat = new MeshStandardMaterial({
+    color: 0xd5dcf2,
+    roughness: 0.32,
+    metalness: 0.2,
+    emissive: 0x6e7ad4,
+    emissiveIntensity: 0.16,
+    transparent: true,
+    opacity: 0.78,
   });
-  const sideGeo = new RoundedBoxGeometry(0.42, wellH + 0.2, 0.9, 1, 0.06);
-  const left = new Mesh(sideGeo, frameMat);
-  const right = new Mesh(sideGeo, frameMat);
-  left.position.set(-COLS / 2 - 0.22, 0, 0);
-  right.position.set(COLS / 2 + 0.22, 0, 0);
-  left.castShadow = right.castShadow = true;
-  left.receiveShadow = right.receiveShadow = true;
-  scene.add(left, right);
-  const floor = new Mesh(new RoundedBoxGeometry(wellW + 0.9, 0.42, 1.05, 1, 0.06), frameMat);
-  floor.position.set(0, -VISIBLE_ROWS / 2 - 0.22, 0.05);
-  floor.receiveShadow = true;
-  floor.castShadow = true;
-  scene.add(floor);
+  const rimT = 0.05;
+  const halfW = (COLS * PITCH) / 2;
+  const halfH = (VISIBLE_ROWS * PITCH) / 2;
+  const rimDepth = 0.1;
+  const addRim = (w, h, x, y) => {
+    const mesh = new Mesh(new RoundedBoxGeometry(w, h, rimDepth, 2, 0.018), rimMat);
+    mesh.position.set(x, y, -0.2);
+    scene.add(mesh);
+  };
+  addRim(rimT, wellH + rimT, -halfW - rimT * 0.15, 0);
+  addRim(rimT, wellH + rimT, halfW + rimT * 0.15, 0);
+  addRim(wellW + rimT * 2, rimT, 0, halfH + rimT * 0.1);
+  addRim(wellW + rimT * 2, rimT, 0, -halfH - rimT * 0.1);
 
   let shakeAmp = 0;
   renderer.autoClear = false;

@@ -1,4 +1,4 @@
-const CACHE = "litifangkuai-v4";
+const CACHE = "litifangkuai-v5";
 
 const ASSETS = [
   "./",

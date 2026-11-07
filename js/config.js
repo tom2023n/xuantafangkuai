@@ -4,10 +4,10 @@ export const HIDDEN_ROWS = 2;
 export const TOTAL_ROWS = VISIBLE_ROWS + HIDDEN_ROWS;
 
 export const PITCH = 1;
-export const BOX_W = 0.9;
-export const BOX_H = 0.9;
-export const BOX_D = 0.92;
-export const BEVEL = 0.11;
+export const BOX_W = 0.86;
+export const BOX_H = 0.86;
+export const BOX_D = 0.78;
+export const BEVEL = 0.055;
 
 export const LOCK_MS = 500;
 export const MAX_LOCK_RESETS = 12;
@@ -19,6 +19,7 @@ export const LINE_SCORE = [0, 100, 300, 500, 800];
 
 export const BEST_KEY = "litifangkuai-best";
 export const MUTE_KEY = "litifangkuai-mute";
+export const MUSIC_KEY = "litifangkuai-music";
 
 export const PIECE_IDS = ["I", "O", "T", "S", "Z", "J", "L"];
 
