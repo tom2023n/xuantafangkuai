@@ -107,6 +107,18 @@ test("stacking into the hidden rows ends the run", () => {
   assert.equal(game.status, "over");
 });
 
+test("new pieces spawn above the visible well", () => {
+  for (const id of Object.keys(SHAPES)) {
+    const game = new BlockGame(() => 0.1);
+    game.start();
+    game.placeNew(id);
+    assert.equal(game.status, "playing", id);
+    const cells = cellsOf(game.piece);
+    assert.ok(cells.length === 4, id);
+    assert.ok(cells.every((cell) => cell.r >= 0 && cell.r < HIDDEN_ROWS), id);
+  }
+});
+
 test("gravity, soft drop, and hard drop scoring", () => {
   const game = new BlockGame(mulberry32(1));
   game.start();
