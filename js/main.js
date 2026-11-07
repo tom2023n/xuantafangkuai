@@ -2,6 +2,7 @@ import { BEST_KEY, COLS, MUTE_KEY, PIECE_COLOR } from "./config.js";
 import { createAudio } from "./audio.js";
 import { BlockGame, SHAPES, mulberry32 } from "./logic.js";
 import { createView } from "./render.js";
+import { startBackdrop } from "./backdrop.js";
 
 const CLEAR_NAME = { 1: "单行", 2: "双行", 3: "三行", 4: "四行" };
 const DAS_DELAY = 170;
@@ -350,6 +351,7 @@ function boot() {
   }
   if (loadNum(MUTE_KEY) === 1) audio.setMuted(true);
   syncMute();
+  startBackdrop(document.querySelector("#bokeh"));
   view.resize();
   window.addEventListener("resize", () => view.resize());
   window.visualViewport?.addEventListener("resize", () => view.resize());

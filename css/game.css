@@ -27,7 +27,7 @@
   --ink: #f3eee6;
   --muted: #b7b1a6;
   --dim: #8d877c;
-  --bg: #101217;
+  --bg: #0c1028;
   --plaque: #e7e1d6;
   --plaque-ink: #1c1a17;
   --line: rgba(243, 238, 230, 0.16);
@@ -61,24 +61,101 @@ html, body {
   inset: 0;
   overflow: hidden;
   touch-action: none;
+  background: #070b18;
 }
 
-#view {
+#sky {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  background:
+    radial-gradient(ellipse at 18% 12%, rgba(98, 78, 196, 0.55), transparent 46%),
+    radial-gradient(ellipse at 86% 78%, rgba(46, 92, 196, 0.42), transparent 48%),
+    radial-gradient(ellipse at 55% 42%, rgba(120, 60, 160, 0.22), transparent 42%),
+    linear-gradient(168deg, #070b18 0%, #12163a 46%, #1a1036 74%, #0a1830 100%);
+}
+
+.blob {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(36px);
+  opacity: 0.7;
+  will-change: transform;
+}
+
+.blob-a {
+  width: 58vw;
+  height: 58vw;
+  left: -12vw;
+  top: -8vw;
+  background: rgba(120, 90, 220, 0.55);
+  animation: drift-a 22s ease-in-out infinite alternate;
+}
+
+.blob-b {
+  width: 46vw;
+  height: 46vw;
+  right: -10vw;
+  bottom: 8vh;
+  background: rgba(50, 110, 210, 0.45);
+  animation: drift-b 26s ease-in-out infinite alternate;
+}
+
+.blob-c {
+  width: 36vw;
+  height: 36vw;
+  left: 30vw;
+  top: 38vh;
+  background: rgba(160, 80, 190, 0.28);
+  animation: drift-c 30s ease-in-out infinite alternate;
+}
+
+@keyframes drift-a {
+  from { transform: translate3d(0, 0, 0) scale(1); }
+  to { transform: translate3d(6vw, 4vh, 0) scale(1.08); }
+}
+
+@keyframes drift-b {
+  from { transform: translate3d(0, 0, 0) scale(1); }
+  to { transform: translate3d(-5vw, -6vh, 0) scale(1.06); }
+}
+
+@keyframes drift-c {
+  from { transform: translate3d(0, 0, 0); }
+  to { transform: translate3d(4vw, -3vh, 0); }
+}
+
+#bokeh {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
   display: block;
+  pointer-events: none;
+}
+
+#view {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  display: block;
   touch-action: none;
+  background: transparent;
 }
 
 #vignette {
   position: absolute;
   inset: 0;
+  z-index: 1;
   pointer-events: none;
-  background:
-    radial-gradient(ellipse at 50% 42%, transparent 42%, rgba(0, 0, 0, 0.28) 100%),
-    linear-gradient(to bottom, rgba(8, 9, 12, 0.35), transparent 18%, transparent 72%, rgba(8, 9, 12, 0.45));
+  background: radial-gradient(ellipse at 50% 42%, transparent 46%, rgba(4, 6, 20, 0.38) 100%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .blob { animation: none; }
 }
 
 #hud {
@@ -91,7 +168,7 @@ html, body {
   flex-direction: column;
   gap: 8px;
   padding: calc(8px + var(--safe-t)) 10px 10px;
-  background: #101217;
+  background: linear-gradient(to bottom, rgba(8, 10, 28, 0.42), rgba(8, 10, 28, 0.08));
   pointer-events: none;
 }
 
@@ -150,8 +227,11 @@ html, body {
   min-height: 78px;
   padding: 6px 8px 8px;
   border-radius: 14px;
-  border: 1px solid rgba(243, 238, 230, 0.14);
-  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(190, 205, 255, 0.22);
+  background: rgba(12, 16, 40, 0.46);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16), 0 8px 22px rgba(0, 0, 0, 0.22);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   color: var(--ink);
   display: flex;
   flex-direction: column;
@@ -213,8 +293,11 @@ button.preview-box {
 .btn {
   font-family: inherit;
   color: var(--ink);
-  background: rgba(20, 22, 28, 0.72);
-  border: 1px solid var(--line);
+  background: rgba(16, 22, 48, 0.5);
+  border: 1px solid rgba(190, 205, 255, 0.24);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   border-radius: 999px;
   min-height: 36px;
   padding: 0 14px;
@@ -252,23 +335,26 @@ button.preview-box {
   grid-template-columns: repeat(5, 1fr);
   gap: 8px;
   padding: 28px 10px calc(12px + var(--safe-b));
-  background: linear-gradient(to top, rgba(8, 9, 12, 0.92) 20%, rgba(8, 9, 12, 0));
+  background: linear-gradient(to top, rgba(8, 10, 28, 0.55), rgba(8, 10, 28, 0));
 }
 
 #controls button {
   font-family: inherit;
   height: 64px;
   border-radius: 16px;
-  border: 1px solid rgba(231, 225, 214, 0.18);
-  background: rgba(231, 225, 214, 0.1);
+  border: 1px solid rgba(190, 205, 255, 0.24);
+  background: rgba(14, 18, 42, 0.48);
   color: var(--ink);
   font-size: 16px;
   font-weight: 500;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
 }
 
 #controls button:active {
   transform: translateY(1px) scale(0.98);
-  background: rgba(231, 225, 214, 0.24);
+  background: rgba(40, 50, 90, 0.62);
 }
 
 #controls .accent {
@@ -295,7 +381,7 @@ button.preview-box {
 
 #screen-home {
   align-items: flex-end;
-  background: linear-gradient(to bottom, rgba(10, 12, 16, 0) 8%, rgba(10, 12, 16, 0.2) 36%, rgba(10, 12, 16, 0.82) 68%, rgba(10, 12, 16, 0.94));
+  background: linear-gradient(to bottom, rgba(8, 10, 28, 0) 0%, rgba(10, 12, 36, 0.18) 34%, rgba(8, 10, 28, 0.72) 68%, rgba(8, 10, 28, 0.84));
 }
 
 .home-card {
@@ -383,7 +469,7 @@ h1 {
 #screen-over {
   align-items: center;
   justify-content: center;
-  background: rgba(8, 9, 12, 0.46);
+  background: rgba(6, 8, 22, 0.28);
   padding: 24px;
 }
 
@@ -391,10 +477,12 @@ h1 {
   width: min(86vw, 340px);
   padding: 28px 22px 22px;
   border-radius: 22px;
-  background: rgba(14, 16, 22, 0.97);
-  border: 1px solid rgba(243, 238, 230, 0.12);
+  background: rgba(14, 16, 40, 0.72);
+  border: 1px solid rgba(190, 205, 255, 0.24);
   text-align: center;
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.38), inset 0 1px 0 rgba(255, 255, 255, 0.14);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
 }
 
 .card h2 {
