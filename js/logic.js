@@ -160,7 +160,7 @@ export class BlockGame {
   goHome() {
     this.status = "home";
     this.board = buildShowcase();
-    this.piece = { id: "T", rot: 0, col: 3, row: HIDDEN_ROWS };
+    this.piece = { id: "T", rot: 0, col: 3, row: HIDDEN_ROWS + 5 };
     this.queue = ["L", "I", "O"];
     this.bag = [];
     this.held = null;
@@ -236,16 +236,18 @@ export class BlockGame {
     const shape = SHAPES[id][0];
     let minX = Infinity;
     let maxX = -Infinity;
-    let minY = Infinity;
+    let maxY = -Infinity;
     for (let i = 0; i < shape.length; i++) {
       minX = Math.min(minX, shape[i][0]);
       maxX = Math.max(maxX, shape[i][0]);
-      minY = Math.min(minY, shape[i][1]);
+      maxY = Math.max(maxY, shape[i][1]);
     }
     const col = Math.round((COLS - 1) / 2 - (minX + maxX) / 2);
-    const row = HIDDEN_ROWS - 1 - minY;
+    // Seat the piece fully in the hidden rows, above the visible well.
+    const row = HIDDEN_ROWS - 1 - maxY;
     this.piece = { id, rot: 0, col, row };
     this.dropAcc = 0;
+    this.dropInterval = gravityMs(this.level);
     this.lockElapsed = 0;
     this.lockResets = 0;
     this.grounded = false;
@@ -447,6 +449,7 @@ export class BlockGame {
     }
     if (this.status !== "playing" || !this.piece) return;
     const interval = soft ? Math.min(SOFT_MS, gravityMs(this.level)) : gravityMs(this.level);
+    this.dropInterval = interval;
     this.dropAcc += dt;
     let steps = 0;
     while (this.dropAcc >= interval && steps < 3 && this.status === "playing" && this.piece) {

@@ -14,6 +14,7 @@ import {
   PCFSoftShadowMap,
   PerspectiveCamera,
   PlaneGeometry,
+  Vector3,
   RepeatWrapping,
   SRGBColorSpace,
   Scene,
@@ -29,6 +30,7 @@ import {
   FALL_MS,
   HIDDEN_ROWS,
   PIECE_HEX,
+  gravityMs,
   PITCH,
   TOTAL_ROWS,
   VISIBLE_ROWS,
@@ -42,8 +44,10 @@ import { RoundedBoxGeometry } from "./rounded-box.js";
 const FOV = 8;
 const LENS_X = 0.16;
 const LENS_Y = 0.32;
-const BOARD_PAD_X = 1.42;
-const BOARD_PAD_Y = 1.55;
+const BOARD_PAD_X = 1.85;
+const BOARD_PAD_Y = 2.05;
+// Cubes above this line are outside the well and must not draw over the lip.
+const CLIP_Y = 10.02;
 
 const dummy = new Object3D();
 const tmpColor = new Color();
@@ -54,6 +58,17 @@ function boardY(row) {
 
 function boardX(col) {
   return (col - (COLS - 1) / 2) * PITCH;
+}
+
+function pieceSlide(game) {
+  if (game.status !== "playing" || !game.piece || game.grounded) return 0;
+  const interval = Math.max(1, game.dropInterval || gravityMs(game.level));
+  const frac = Math.min(1, Math.max(0, game.dropAcc / interval));
+  return -frac * PITCH;
+}
+
+function aboveWell(y, scale = 1) {
+  return y - (BOX_H * scale) / 2 >= CLIP_Y;
 }
 
 function shadeOf(col, row) {
@@ -149,8 +164,9 @@ function makeWellTexture() {
   canvas.width = COLS * cell;
   canvas.height = VISIBLE_ROWS * cell;
   const g = canvas.getContext("2d");
-  g.clearRect(0, 0, canvas.width, canvas.height);
-  g.strokeStyle = "rgba(214, 224, 255, 0.09)";
+  g.fillStyle = "#12182c";
+  g.fillRect(0, 0, canvas.width, canvas.height);
+  g.strokeStyle = "rgba(198, 210, 255, 0.2)";
   g.lineWidth = 1;
   g.beginPath();
   for (let x = 0; x <= COLS; x++) {
@@ -186,6 +202,7 @@ export function createView(canvas) {
   renderer.toneMappingExposure = 1.02;
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = PCFSoftShadowMap;
+  renderer.localClippingEnabled = true;
 
   const scene = new Scene();
   scene.background = null;
@@ -203,8 +220,15 @@ export function createView(canvas) {
     metalness: 0.06,
     color: 0xffffff,
   };
-  const landedMat = new MeshStandardMaterial(gloss);
-  const activeMat = new MeshStandardMaterial({ ...gloss, roughness: 0.2, metalness: 0.1 });
+  const clipPlane = { normal: new Vector3(0, -1, 0), constant: CLIP_Y };
+  const landedMat = new MeshStandardMaterial({ ...gloss, clippingPlanes: [clipPlane], clipShadows: true });
+  const activeMat = new MeshStandardMaterial({
+    ...gloss,
+    roughness: 0.2,
+    metalness: 0.1,
+    clippingPlanes: [clipPlane],
+    clipShadows: true,
+  });
 
   const geo = new RoundedBoxGeometry(BOX_W, BOX_H, BOX_D, 2, BEVEL);
   const landed = new InstancedMesh(geo, landedMat, TOTAL_ROWS * COLS);
@@ -243,35 +267,62 @@ export function createView(canvas) {
   rim.position.set(2, 2, -12);
   scene.add(rim);
 
-  const wellW = COLS * PITCH + 0.08;
-  const wellH = VISIBLE_ROWS * PITCH + 0.08;
-  const catcher = new Mesh(
-    new PlaneGeometry(wellW, wellH),
-    new MeshStandardMaterial({ color: 0x12182c, roughness: 1, metalness: 0 })
+  const innerHalfW = (COLS * PITCH) / 2;
+  const floorTop = -((VISIBLE_ROWS * PITCH) / 2) - 0.06;
+  const wallT = 0.46;
+  const wallD = 1.52;
+  const wallZ = 0.16;
+  const floorT = 0.5;
+  const wallTop = CLIP_Y + 0.22;
+  const wallBottom = floorTop - 0.08;
+  const wallH = wallTop - wallBottom;
+  const wallY = (wallTop + wallBottom) / 2;
+  const wallX = innerHalfW + wallT / 2;
+  const glass = {
+    color: 0x343e6e,
+    roughness: 0.2,
+    metalness: 0.52,
+    emissive: 0x1a2148,
+    emissiveIntensity: 0.42,
+  };
+  const wallMat = new MeshStandardMaterial(glass);
+  const floorMat = new MeshStandardMaterial({ ...glass, color: 0x2c355f, roughness: 0.32, metalness: 0.4 });
+  const addSolid = (w, h, d, x, y, z, mat, radius) => {
+    const mesh = new Mesh(new RoundedBoxGeometry(w, h, d, 2, radius), mat);
+    mesh.position.set(x, y, z);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    scene.add(mesh);
+    return mesh;
+  };
+  addSolid(wallT, wallH, wallD, -wallX, wallY, wallZ, wallMat, 0.1);
+  addSolid(wallT, wallH, wallD, wallX, wallY, wallZ, wallMat, 0.1);
+  addSolid(wallX * 2 + wallT, floorT, wallD, 0, floorTop - floorT / 2, wallZ, floorMat, 0.1);
+  const lipH = 0.2;
+  const lipD = 0.34;
+  addSolid(
+    innerHalfW * 2 + 0.06,
+    lipH,
+    lipD,
+    0,
+    wallTop - lipH / 2,
+    wallZ + wallD / 2 - lipD / 2,
+    wallMat,
+    0.07
   );
-  catcher.position.set(0, 0, -0.62);
-  catcher.receiveShadow = true;
-  scene.add(catcher);
 
-  const glow = new Mesh(
-    new PlaneGeometry(wellW + 0.08, wellH + 0.08),
-    new MeshBasicMaterial({ color: 0x9aa6ff, transparent: true, opacity: 0.14, depthWrite: false })
-  );
-  glow.position.set(0, 0, -0.7);
-  scene.add(glow);
-
-  const well = new Mesh(
-    new PlaneGeometry(wellW, wellH),
-    new MeshBasicMaterial({
+  const back = new Mesh(
+    new PlaneGeometry(COLS * PITCH, VISIBLE_ROWS * PITCH),
+    new MeshStandardMaterial({
+      color: 0xffffff,
       map: makeWellTexture(),
-      transparent: true,
-      opacity: 0.85,
-      depthWrite: false,
+      roughness: 0.92,
+      metalness: 0.04,
     })
   );
-  well.position.set(0, 0, -0.52);
-  well.renderOrder = 1;
-  scene.add(well);
+  back.position.set(0, 0, wallZ - wallD / 2 - 0.04);
+  back.receiveShadow = true;
+  scene.add(back);
 
   const blobTex = (() => {
     const c = document.createElement("canvas");
@@ -288,34 +339,17 @@ export function createView(canvas) {
   })();
   const dropShadow = new InstancedMesh(
     new PlaneGeometry(1.25, 1.25),
-    new MeshBasicMaterial({ map: blobTex, transparent: true, depthWrite: false, opacity: 0.55 })
+    new MeshBasicMaterial({
+      map: blobTex,
+      transparent: true,
+      depthWrite: false,
+      opacity: 0.55,
+      clippingPlanes: [clipPlane],
+    })
   );
   dropShadow.frustumCulled = false;
   dropShadow.renderOrder = 2;
   scene.add(dropShadow);
-
-  const rimMat = new MeshStandardMaterial({
-    color: 0xd5dcf2,
-    roughness: 0.32,
-    metalness: 0.2,
-    emissive: 0x6e7ad4,
-    emissiveIntensity: 0.16,
-    transparent: true,
-    opacity: 0.78,
-  });
-  const rimT = 0.05;
-  const halfW = (COLS * PITCH) / 2;
-  const halfH = (VISIBLE_ROWS * PITCH) / 2;
-  const rimDepth = 0.1;
-  const addRim = (w, h, x, y) => {
-    const mesh = new Mesh(new RoundedBoxGeometry(w, h, rimDepth, 2, 0.018), rimMat);
-    mesh.position.set(x, y, -0.2);
-    scene.add(mesh);
-  };
-  addRim(rimT, wellH + rimT, -halfW - rimT * 0.15, 0);
-  addRim(rimT, wellH + rimT, halfW + rimT * 0.15, 0);
-  addRim(wellW + rimT * 2, rimT, 0, halfH + rimT * 0.1);
-  addRim(wellW + rimT * 2, rimT, 0, -halfH - rimT * 0.1);
 
   let shakeAmp = 0;
   let camX = 0;
@@ -359,7 +393,8 @@ export function createView(canvas) {
   }
 
   function shadowOnBoard(x, y, z) {
-    const t = (-0.58 - camZ) / (z - camZ);
+    const shadowZ = wallZ - wallD / 2 + 0.02;
+    const t = (shadowZ - camZ) / (z - camZ);
     return {
       x: camX + t * (x - camX),
       y: camY + t * (y - camY),
@@ -376,10 +411,13 @@ export function createView(canvas) {
 
   function drawCells(mesh, cells, opts) {
     let n = 0;
+    const dy = opts.dy || 0;
     for (let i = 0; i < cells.length; i++) {
       const cell = cells[i];
       const s = opts.scale || 1;
-      place(mesh, n, boardX(cell.c), boardY(cell.r) + (opts.dy || 0), opts.z || 0, s, s, s);
+      const y = boardY(cell.r) + dy;
+      if (aboveWell(y, s)) continue;
+      place(mesh, n, boardX(cell.c), y, opts.z || 0, s, s, s);
       paint(mesh, n, opts.color || PIECE_HEX[opts.type] || PIECE_HEX[1], opts.mul || 1);
       n++;
     }
@@ -407,6 +445,8 @@ export function createView(canvas) {
         for (let c = 0; c < COLS; c++) {
           const type = game.board[r][c];
           if (!type) continue;
+          const y = boardY(r) + extraY;
+          if (aboveWell(y)) continue;
           let scale = 1;
           let z = 0;
           let mul = shadeOf(c, r);
@@ -422,7 +462,7 @@ export function createView(canvas) {
               }
             }
           }
-          place(landed, n, boardX(c), boardY(r) + extraY, z, scale, scale, scale);
+          place(landed, n, boardX(c), y, z, scale, scale, scale);
           paint(landed, n, PIECE_HEX[type] || PIECE_HEX[1], mul);
           n++;
         }
@@ -432,12 +472,15 @@ export function createView(canvas) {
       if (game.piece && game.status !== "clearing") {
         const typeIndex = { I: 1, O: 2, T: 3, S: 4, Z: 5, J: 6, L: 7 }[game.piece.id] || 1;
         const bob = game.status === "home" ? Math.sin(now * 0.0022) * 0.08 : 0;
+        const slide = pieceSlide(game);
         const cells = cellsOf(game.piece);
         let s = 0;
         if (game.status === "playing") {
           for (let i = 0; i < cells.length; i++) {
-            const hit = shadowOnBoard(boardX(cells[i].c), boardY(cells[i].r) + bob, 0.36);
-            place(dropShadow, s, hit.x, hit.y, -0.58, 1, 1, 1);
+            const y = boardY(cells[i].r) + slide;
+            if (aboveWell(y)) continue;
+            const hit = shadowOnBoard(boardX(cells[i].c), y, 0.36);
+            place(dropShadow, s, hit.x, hit.y, wallZ - wallD / 2 + 0.02, 1, 1, 1);
             s++;
           }
         }
@@ -447,7 +490,7 @@ export function createView(canvas) {
           scale: 1,
           type: typeIndex,
           mul: 1,
-          dy: bob,
+          dy: bob + slide,
         });
       } else {
         commit(active, 0);
